@@ -1,14 +1,22 @@
 "use client";
 
 import React from "react";
-import { Download, ExternalLink, FileText, Sparkles, Terminal, ShieldCheck } from "lucide-react";
+import { Download, ExternalLink, FileText, Sparkles, ShieldCheck, Eye, Cpu } from "lucide-react";
 import confetti from "canvas-confetti";
 
 interface HeaderProps {
   onOpenAssessmentModal: () => void;
+  onOpenResumeModal: () => void;
+  activeProvider?: string;
+  latencyMs?: number;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenAssessmentModal }) => {
+export const Header: React.FC<HeaderProps> = ({
+  onOpenAssessmentModal,
+  onOpenResumeModal,
+  activeProvider,
+  latencyMs,
+}) => {
   const triggerConfetti = () => {
     confetti({
       particleCount: 40,
@@ -19,7 +27,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAssessmentModal }) => {
   };
 
   return (
-    <header className="w-full border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-md sticky top-0 z-30 transition-all">
+    <header className="w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30 transition-all">
       <div className="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         {/* Left: Identity & Status */}
         <div className="flex items-center gap-3">
@@ -39,7 +47,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAssessmentModal }) => {
               </span>
             </div>
             <p className="text-xs text-slate-400 font-mono">
-              AI Engineer · Speech AI & Autonomous Agent Systems
+              AI Engineer · Speech AI, Generative AI &amp; Autonomous Agent Pods
             </p>
           </div>
         </div>
@@ -49,8 +57,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAssessmentModal }) => {
           {/* Latency / Engine Pill */}
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-300 font-mono text-[11px]">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <Terminal className="w-3 h-3 text-cyan-400" />
-            <span>&lt;240ms Duplex Voice Engine</span>
+            <Cpu className="w-3 h-3 text-cyan-400" />
+            <span>
+              {activeProvider
+                ? `${activeProvider} · ${latencyMs ? `${latencyMs}ms` : "Active"}`
+                : "Groq Neural Engine & Parallel.ai Active"}
+            </span>
           </div>
 
           {/* Assessment Brief Modal Trigger */}
@@ -62,6 +74,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAssessmentModal }) => {
             <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
             <span className="hidden md:inline">100x Assessment Brief</span>
             <span className="md:hidden">Brief</span>
+          </button>
+
+          {/* In-App Resume Preview */}
+          <button
+            onClick={onOpenResumeModal}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition"
+            title="Preview Resume PDF in Modal"
+          >
+            <Eye className="w-3.5 h-3.5 text-cyan-400" />
+            <span>View Resume</span>
           </button>
 
           {/* Resume Download */}

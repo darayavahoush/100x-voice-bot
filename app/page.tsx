@@ -8,10 +8,12 @@ import { VoiceController } from "@/components/VoiceController";
 import { QuestionPills } from "@/components/QuestionPills";
 import { ChatTranscript } from "@/components/ChatTranscript";
 import { AssessmentModal } from "@/components/AssessmentModal";
+import { ResumeModal } from "@/components/ResumeModal";
+import { AgentPodVisualizer } from "@/components/AgentPodVisualizer";
+import { SpeedrunChallenge } from "@/components/SpeedrunChallenge";
 import { soundFX } from "@/lib/audio";
-import { Key, Settings2, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
+import { Key, Settings2, Sparkles, ChevronDown, ChevronUp, Cpu } from "lucide-react";
 
-// SpeechRecognition type polyfill
 interface SpeechRecognitionErrorEvent extends Event {
   error: string;
 }
@@ -60,16 +62,25 @@ export default function Home() {
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState<boolean>(true);
   const [speechRate, setSpeechRate] = useState<number>(1.0);
-  const [isAssessmentModalOpen, setIsAssessmentModalOpen] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [enableWebSearch, setEnableWebSearch] = useState<boolean>(false);
 
-  // Advanced settings for optional keys
+  // Performance telemetry
+  const [lastLatencyMs, setLastLatencyMs] = useState<number | undefined>(undefined);
+  const [lastProvider, setLastProvider] = useState<string | undefined>("Groq Qwen 3.8");
+  const [isGrounded, setIsGrounded] = useState<boolean>(false);
+
+  // Modals
+  const [isAssessmentModalOpen, setIsAssessmentModalOpen] = useState<boolean>(false);
+  const [isResumeModalOpen, setIsResumeModalOpen] = useState<boolean>(false);
+
+  // Advanced settings drawer
   const [isAdvancedOpen, setIsAdvancedOpen] = useState<boolean>(false);
   const [customApiKey, setCustomApiKey] = useState<string>("");
 
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const handleSendMessageRef = useRef<(text: string) => Promise<void>>(async () => {});
+  const handleSendMessageRef = useRef<(text: string, search?: boolean) => Promise<void>>(async () => {});
   const stopAudioStreamRef = useRef<() => void>(() => {});
 
   const stopAudioStream = useCallback(() => {
@@ -80,6 +91,8 @@ export default function Home() {
   }, [audioStream]);
 
   stopAudioStreamRef.current = stopAudioStream;
+
+  // Initialize Speech Recognition
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -142,7 +155,6 @@ export default function Home() {
   }, []);
 
   const startListening = async () => {
-    // Interrupt any ongoing speech
     interruptSpeech();
 
     try {
@@ -196,9 +208,8 @@ export default function Home() {
 
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = speechRate;
-      utterance.pitch = 1.05; // slightly higher, bright & articulate
+      utterance.pitch = 1.05;
 
-      // Pick best natural voice
       const voices = window.speechSynthesis.getVoices();
       const preferred = voices.find(
         (v) =>
@@ -234,7 +245,7 @@ export default function Home() {
     [voiceEnabled, speechRate]
   );
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, searchOverride?: boolean) => {
     if (!text.trim()) return;
 
     interruptSpeech();
@@ -251,6 +262,8 @@ export default function Home() {
     setIsLoading(true);
     setVoiceState("thinking");
 
+    const doSearch = searchOverride !== undefined ? searchOverride : enableWebSearch;
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -261,6 +274,7 @@ export default function Home() {
             content: m.content,
           })),
           userApiKey: customApiKey || undefined,
+          enableWebSearch: doSearch,
         }),
       });
 
@@ -279,11 +293,14 @@ export default function Home() {
       setMessages((prev) => [...prev, assistantMsg]);
       setIsLoading(false);
 
+      if (data.latencyMs) setLastLatencyMs(data.latencyMs);
+      if (data.provider) setLastProvider(data.provider);
+      setIsGrounded(Boolean(data.grounded));
+
       if (data.matchedId) {
         setActiveQuestionId(data.matchedId);
       }
 
-      // Speak response out loud
       speakText(botReply);
     } catch (err) {
       console.error("Chat error:", err);
@@ -311,11 +328,24 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100 selection:bg-cyan-500 selection:text-slate-950">
       {/* Top Header */}
-      <Header onOpenAssessmentModal={() => setIsAssessmentModalOpen(true)} />
+      <Header
+        onOpenAssessmentModal={() => setIsAssessmentModalOpen(true)}
+        onOpenResumeModal={() => setIsResumeModalOpen(true)}
+        activeProvider={lastProvider}
+        latencyMs={lastLatencyMs}
+      />
 
       {/* Main Container */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 flex flex-col gap-6">
-        {/* Stage 1 Benchmark Pills (Evaluator Quick Testing) */}
+        {/* Stage 1 Speedrun Gamified Challenge Banner */}
+        <section aria-label="Speedrun Challenge">
+          <SpeedrunChallenge
+            onTriggerQuestion={handleSendMessage}
+            isVoiceActive={voiceState === "speaking" || isLoading}
+          />
+        </section>
+
+        {/* Stage 1 Benchmark Prompts (1-Tap Tabs) */}
         <section aria-label="Assessment Questions">
           <QuestionPills
             onSelectQuestion={handleSelectQuestion}
@@ -326,22 +356,23 @@ export default function Home() {
 
         {/* Central Voice Engine & Dialogue Section */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Left Column: Glowing Voice Engine & Visualizer */}
+          {/* Left Column: Voice Engine Hologram & Controls */}
           <div className="lg:col-span-5 flex flex-col items-center justify-center p-6 rounded-3xl bg-slate-900/50 border border-slate-800/90 shadow-2xl relative overflow-hidden backdrop-blur-md">
             {/* Ambient Background Aura */}
             <div className="absolute -top-12 -left-12 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
             <div className="absolute -bottom-12 -right-12 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
 
             <div className="text-center mb-1">
-              <span className="text-[11px] font-mono tracking-widest uppercase text-cyan-400 font-semibold">
-                Interactive Voice Engine
+              <span className="text-[11px] font-mono tracking-widest uppercase text-cyan-400 font-semibold flex items-center justify-center gap-1">
+                <Sparkles className="w-3 h-3 text-cyan-400" />
+                Interactive Duplex Voice Engine
               </span>
               <h2 className="text-sm font-bold text-white mt-0.5">
                 Real-Time Voice &amp; Persona Interface
               </h2>
             </div>
 
-            {/* Dynamic Waveform Visualizer */}
+            {/* Dynamic Waveform & Orbital Particles Visualizer */}
             <Visualizer state={voiceState} audioStream={audioStream} />
 
             {/* Central Voice Controller */}
@@ -357,21 +388,23 @@ export default function Home() {
               onChangeSpeechRate={setSpeechRate}
             />
 
-            {/* Quick Context Card */}
+            {/* Live Model & Engine Telemetry Pill */}
             <div className="w-full mt-4 p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80 text-[11px] text-slate-400 flex flex-col gap-1.5">
               <div className="flex items-center justify-between text-slate-300 font-medium">
-                <span className="flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-cyan-400" />
-                  Candidate Calibration
+                <span className="flex items-center gap-1.5">
+                  <Cpu className="w-3 h-3 text-cyan-400" />
+                  Groq + Parallel.ai Pipeline
                 </span>
-                <span className="text-[10px] text-emerald-400 font-mono">100% Zero-GPA Constraint</span>
+                <span className="text-[10px] text-emerald-400 font-mono">
+                  {lastLatencyMs ? `${lastLatencyMs}ms` : "<200ms Edge"}
+                </span>
               </div>
-              <p className="leading-snug text-slate-400">
-                Grounded in Ananya&apos;s real-world engineering at <strong className="text-slate-200">Manas Learning</strong> (clinical speech AI across 8 Indian languages) and <strong className="text-slate-200">Nivesh AI</strong> (Azure RAG for 10,000+ MFDs).
+              <p className="leading-snug text-slate-400 text-[10px]">
+                Powered by Groq&apos;s lightning-fast inference and Parallel.ai live web retrieval. Grounded in Ananya&apos;s production Speech AI (Manas Learning) and Enterprise RAG (Nivesh AI).
               </p>
             </div>
 
-            {/* Advanced Settings Drawer (Optional Keys) */}
+            {/* Advanced Settings Drawer (Optional Custom Key) */}
             <div className="w-full mt-3 pt-2 border-t border-slate-800/60">
               <button
                 onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
@@ -385,15 +418,15 @@ export default function Home() {
               </button>
 
               {isAdvancedOpen && (
-                <div className="mt-2 p-3 rounded-xl bg-slate-950/90 border border-slate-800 text-[11px] space-y-2">
+                <div className="mt-2 p-3 rounded-xl bg-slate-950/90 border border-slate-800 text-[11px] space-y-2 animate-fade-in">
                   <p className="text-slate-400 text-[10px] leading-tight">
-                    *Zero key is required for evaluators by default (handled automatically). You can optionally provide your own Groq / Grok / OpenAI key below to benchmark arbitrary models.
+                    *The system already has Groq and Parallel.ai pre-configured. You can optionally override with a custom key below:
                   </p>
                   <div className="flex items-center gap-2">
                     <Key className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
                     <input
                       type="password"
-                      placeholder="Optional: gsk_... / xai-... / sk-..."
+                      placeholder="Optional: gsk_... / sk-..."
                       value={customApiKey}
                       onChange={(e) => setCustomApiKey(e.target.value)}
                       className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500"
@@ -412,15 +445,33 @@ export default function Home() {
               onReplayVoice={speakText}
               onClearMessages={() => setMessages([])}
               isLoading={isLoading}
+              enableWebSearch={enableWebSearch}
+              onToggleWebSearch={() => setEnableWebSearch(!enableWebSearch)}
             />
           </div>
         </div>
+
+        {/* Live Multi-Agent Pod Architecture Inspection */}
+        <section aria-label="Agent Pod Pipeline">
+          <AgentPodVisualizer
+            voiceState={voiceState}
+            lastLatencyMs={lastLatencyMs}
+            lastProvider={lastProvider}
+            isGrounded={isGrounded}
+          />
+        </section>
       </main>
 
-      {/* Assessment Modal Brief */}
+      {/* Assessment Brief Modal */}
       <AssessmentModal
         isOpen={isAssessmentModalOpen}
         onClose={() => setIsAssessmentModalOpen(false)}
+      />
+
+      {/* In-App Resume Preview Modal */}
+      <ResumeModal
+        isOpen={isResumeModalOpen}
+        onClose={() => setIsResumeModalOpen(false)}
       />
 
       {/* Footer */}
