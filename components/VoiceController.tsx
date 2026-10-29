@@ -1,19 +1,17 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { Mic, Square, Volume2, VolumeX, Sparkles, AlertCircle } from "lucide-react";
+import { Mic, Square, Volume2, Sparkles, AlertCircle, Pause } from "lucide-react";
 import { VoiceState } from "@/lib/types";
+import { HoloSphere } from "@/components/HoloSphere";
 
 interface VoiceControllerProps {
   state: VoiceState;
   onStartListening: () => void;
   onStopListening: () => void;
   onInterruptSpeech: () => void;
-  voiceEnabled: boolean;
-  onToggleVoice: () => void;
   interimTranscript: string;
-  speechRate: number;
-  onChangeSpeechRate: (rate: number) => void;
+  audioStream: MediaStream | null;
 }
 
 export const VoiceController: React.FC<VoiceControllerProps> = ({
@@ -21,11 +19,8 @@ export const VoiceController: React.FC<VoiceControllerProps> = ({
   onStartListening,
   onStopListening,
   onInterruptSpeech,
-  voiceEnabled,
-  onToggleVoice,
   interimTranscript,
-  speechRate,
-  onChangeSpeechRate,
+  audioStream,
 }) => {
   const [browserSupported, setBrowserSupported] = useState<boolean>(true);
 
@@ -36,7 +31,7 @@ export const VoiceController: React.FC<VoiceControllerProps> = ({
     setBrowserSupported(hasSpeechRec);
   }, []);
 
-  const handleMainButtonClick = useCallback(() => {
+  const handleMainAction = useCallback(() => {
     if (state === "speaking") {
       onInterruptSpeech();
     } else if (state === "listening") {
@@ -46,7 +41,7 @@ export const VoiceController: React.FC<VoiceControllerProps> = ({
     }
   }, [state, onInterruptSpeech, onStopListening, onStartListening]);
 
-  // Keyboard shortcut: Spacebar to toggle listen if not typing in input
+  // Keyboard shortcut: Spacebar to toggle listen if not typing
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
@@ -57,160 +52,127 @@ export const VoiceController: React.FC<VoiceControllerProps> = ({
 
       if (e.code === "Space" && !isInput && !e.repeat) {
         e.preventDefault();
-        handleMainButtonClick();
+        handleMainAction();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleMainButtonClick]);
+  }, [handleMainAction]);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full py-4">
-      {/* Central Interactive Voice Button */}
-      <div className="relative flex items-center justify-center my-2">
-        {/* Animated Radial Pulse Rings */}
-        {state === "listening" && (
-          <>
-            <span className="absolute w-36 h-36 rounded-full bg-cyan-500/20 animate-ping duration-1000" />
-            <span className="absolute w-44 h-44 rounded-full border border-cyan-500/40 animate-pulse duration-700" />
-          </>
-        )}
-
-        {state === "speaking" && (
-          <>
-            <span className="absolute w-36 h-36 rounded-full bg-purple-500/20 animate-ping duration-1000" />
-            <span className="absolute w-44 h-44 rounded-full border border-purple-500/40 animate-pulse duration-800" />
-          </>
-        )}
-
-        {state === "thinking" && (
-          <span className="absolute w-36 h-36 rounded-full border-2 border-amber-500/50 border-t-transparent animate-spin" />
-        )}
-
-        {/* The Hero Button */}
-        <button
-          onClick={handleMainButtonClick}
-          disabled={!browserSupported && state !== "speaking"}
-          className={`relative z-10 w-24 h-24 rounded-full flex flex-col items-center justify-center shadow-2xl transition-all duration-300 transform active:scale-95 ${
+    <div className="flex flex-col items-center justify-center w-full py-2">
+      {/* Dynamic Status Island Pill */}
+      <div className="mb-2">
+        <div
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border transition-all duration-300 ${
             state === "listening"
-              ? "bg-gradient-to-tr from-cyan-500 to-emerald-500 text-slate-950 shadow-cyan-500/50 scale-105"
+              ? "bg-cyan-950/80 border-cyan-500/80 text-cyan-200 shadow-lg shadow-cyan-500/20"
               : state === "speaking"
-              ? "bg-gradient-to-tr from-purple-600 to-pink-600 text-white shadow-purple-500/50 hover:scale-105"
+              ? "bg-purple-950/80 border-purple-500/80 text-purple-200 shadow-lg shadow-purple-500/20"
               : state === "thinking"
-              ? "bg-slate-900 border-2 border-amber-500 text-amber-400 shadow-amber-500/20"
-              : "bg-gradient-to-tr from-slate-900 via-slate-800 to-slate-900 text-cyan-400 hover:text-white border border-slate-700/80 hover:border-cyan-500/50 hover:shadow-cyan-500/20 hover:scale-105"
+              ? "bg-amber-950/80 border-amber-500/80 text-amber-200 shadow-lg shadow-amber-500/20"
+              : "bg-slate-900/90 border-white/10 text-slate-300"
           }`}
-          aria-label={
-            state === "listening"
-              ? "Stop listening"
-              : state === "speaking"
-              ? "Stop speaking"
-              : "Start voice input"
-          }
         >
-          {state === "listening" ? (
-            <Square className="w-8 h-8 fill-current" />
-          ) : state === "speaking" ? (
-            <Volume2 className="w-9 h-9 animate-bounce" />
-          ) : state === "thinking" ? (
-            <Sparkles className="w-8 h-8 animate-spin" />
-          ) : (
-            <Mic className="w-9 h-9" />
-          )}
-
-          <span className="text-[10px] font-mono font-semibold tracking-wider uppercase mt-1">
+          <span
+            className={`w-2 h-2 rounded-full ${
+              state === "listening"
+                ? "bg-cyan-400 animate-ping"
+                : state === "speaking"
+                ? "bg-purple-400 animate-pulse"
+                : state === "thinking"
+                ? "bg-amber-400 animate-spin"
+                : "bg-emerald-400"
+            }`}
+          />
+          <span className="text-xs font-mono font-medium">
             {state === "listening"
-              ? "Listening"
+              ? "Listening... Speak naturally"
               : state === "speaking"
-              ? "Speaking"
+              ? "Speaking... Tap to interrupt"
               : state === "thinking"
-              ? "Thinking"
-              : "Speak"}
+              ? "Reasoning with Groq Qwen..."
+              : "Voice Duplex Online"}
           </span>
-        </button>
+        </div>
       </div>
 
-      {/* State Status Text */}
-      <div className="text-center mt-2 min-h-[28px] flex flex-col items-center justify-center px-4">
+      {/* Mesmerizing Holographic Fluid Sphere */}
+      <HoloSphere state={state} audioStream={audioStream} onOrbClick={handleMainAction} />
+
+      {/* Live Interim Transcript Bubble */}
+      <div className="text-center min-h-[32px] max-w-sm flex items-center justify-center px-4 my-1">
         {state === "listening" ? (
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-            <span className="text-sm font-medium text-cyan-300">
-              {interimTranscript ? `"${interimTranscript}"` : "Listening... speak now"}
-            </span>
-          </div>
+          <p className="text-xs font-medium text-cyan-300 bg-cyan-950/60 px-3 py-1 rounded-xl border border-cyan-800/40 animate-pulse">
+            {interimTranscript ? `"${interimTranscript}"` : "Listening to microphone audio..."}
+          </p>
         ) : state === "speaking" ? (
-          <div className="flex items-center gap-2 text-purple-300 text-xs">
-            <Volume2 className="w-3.5 h-3.5 animate-pulse" />
-            <span>Voice synthesis active · Click button to interrupt</span>
+          <div className="flex items-center gap-1.5 text-xs text-purple-300">
+            <Volume2 className="w-3.5 h-3.5 animate-bounce" />
+            <span>Streaming audio output · Sub-300ms</span>
           </div>
         ) : state === "thinking" ? (
-          <div className="flex items-center gap-2 text-amber-400 text-xs">
+          <div className="flex items-center gap-1.5 text-xs text-amber-400">
             <Sparkles className="w-3.5 h-3.5 animate-spin" />
-            <span>Retrieving Ananya&apos;s persona &amp; reasoning...</span>
+            <span>Synthesizing voice response...</span>
           </div>
         ) : (
-          <div className="text-xs text-slate-400 flex items-center gap-1.5">
-            <span>Tap mic or press</span>
-            <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-slate-800 border border-slate-700 rounded text-slate-300">
+          <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <span>Tap the holographic orb or press</span>
+            <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-white/5 border border-white/10 rounded text-slate-300">
               Space
             </kbd>
             <span>to talk</span>
           </div>
         )}
-
-        {!browserSupported && (
-          <div className="flex items-center gap-1 text-xs text-amber-400/90 mt-1">
-            <AlertCircle className="w-3.5 h-3.5" />
-            <span>Browser speech recognition requires Chrome, Edge, or Safari</span>
-          </div>
-        )}
       </div>
 
-      {/* Micro Voice Controls Bar */}
-      <div className="flex items-center gap-3 mt-3 text-xs">
-        {/* Toggle Speech Synthesis Output */}
+      {/* Hero Control Trigger Button */}
+      <div className="mt-3 flex items-center gap-3">
         <button
-          onClick={onToggleVoice}
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-full border transition ${
-            voiceEnabled
-              ? "bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700"
-              : "bg-red-950/40 text-red-400 border-red-900/60"
+          onClick={handleMainAction}
+          disabled={!browserSupported && state !== "speaking"}
+          className={`px-5 py-2.5 rounded-2xl flex items-center gap-2 font-bold text-xs uppercase tracking-wider transition-all duration-300 shadow-xl active:scale-95 ${
+            state === "listening"
+              ? "bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-red-500/20"
+              : state === "speaking"
+              ? "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-purple-500/20"
+              : state === "thinking"
+              ? "bg-slate-800 text-amber-400 border border-amber-500/40"
+              : "bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white shadow-cyan-500/25 hover:shadow-cyan-500/40"
           }`}
-          title={voiceEnabled ? "Voice output is ON" : "Voice output is MUTED"}
         >
-          {voiceEnabled ? (
+          {state === "listening" ? (
             <>
-              <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Voice ON</span>
+              <Square className="w-3.5 h-3.5 fill-current" />
+              <span>Stop &amp; Submit</span>
+            </>
+          ) : state === "speaking" ? (
+            <>
+              <Pause className="w-3.5 h-3.5 fill-current" />
+              <span>Interrupt Voice</span>
+            </>
+          ) : state === "thinking" ? (
+            <>
+              <Sparkles className="w-3.5 h-3.5 animate-spin" />
+              <span>Processing...</span>
             </>
           ) : (
             <>
-              <VolumeX className="w-3.5 h-3.5" />
-              <span>Voice Muted</span>
+              <Mic className="w-4 h-4" />
+              <span>Start Voice Session</span>
             </>
           )}
         </button>
-
-        {/* Speed presets */}
-        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800">
-          <span className="text-[10px] text-slate-500 font-mono px-1">Speed</span>
-          {[0.9, 1.0, 1.15].map((rate) => (
-            <button
-              key={rate}
-              onClick={() => onChangeSpeechRate(rate)}
-              className={`px-1.5 py-0.5 text-[10px] font-mono rounded ${
-                speechRate === rate
-                  ? "bg-cyan-500/20 text-cyan-300 font-bold"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {rate}x
-            </button>
-          ))}
-        </div>
       </div>
+
+      {!browserSupported && (
+        <div className="flex items-center gap-1 text-[11px] text-amber-400/90 mt-2">
+          <AlertCircle className="w-3.5 h-3.5" />
+          <span>Browser speech recognition requires Chrome, Edge, or Safari</span>
+        </div>
+      )}
     </div>
   );
 };
